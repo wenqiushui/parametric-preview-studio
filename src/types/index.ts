@@ -1,5 +1,5 @@
 
-import { Vector3, Euler, Object3D } from 'three';
+import { Vector3, Euler, Object3D, Texture, Material } from 'three';
 
 export interface ModelParameter {
   id: string;
@@ -44,4 +44,30 @@ export interface AppState {
 export interface TransformMode {
   mode: 'translate' | 'rotate' | 'scale';
   space: 'world' | 'local';
+}
+
+// Add the missing interfaces
+export interface PickResult {
+  object: THREE.Object3D;
+  face?: number;
+  faceIndex?: number;
+  point: THREE.Vector3;
+  distance: number;
+  isFace: boolean;
+}
+
+export interface MaterialDefinition {
+  id: string;
+  name: string;
+  type: 'standard' | 'basic' | 'phong';
+  properties: {
+    color: string;
+    roughness?: number;
+    metalness?: number;
+    transparent?: boolean;
+    opacity?: number;
+    map?: string;
+    [key: string]: any;
+  };
+  preview: string;
 }

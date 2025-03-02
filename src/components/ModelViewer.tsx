@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { setupScene, pickObject, getTransformFromObject, highlightObject, clearHighlights, findObjectById, disposeObject } from '@/utils/threeHelpers';
@@ -151,7 +150,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
         
         sceneData.transformControls.attach(selectedObject);
         
-        highlightObject(selectedObject, selectedFaceId);
+        highlightObject(selectedObject, selectedFaceId ? parseInt(selectedFaceId) : undefined);
         
         setLocalTransform(getTransformFromObject(selectedObject));
       }
