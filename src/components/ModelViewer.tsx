@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { setupScene, pickObject, getTransformFromObject, highlightObject, clearHighlights, findObjectById, disposeObject } from '@/utils/threeHelpers';
@@ -40,7 +41,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     transformControls: null,
     animate: null
   });
-  const { state, updateModel, selectModel, deselectModel } = useModelContext();
+  const { state, dispatch, updateModel, selectModel, deselectModel } = useModelContext();
   const { models, selectedModelId, selectedFaceId } = state;
   const [localTransform, setLocalTransform] = useState({
     position: new Vector3(),

@@ -1,7 +1,9 @@
+
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { Vector3, Euler } from 'three';
 import { AppState, ModelInstance, ModelPrototype } from '@/types';
 import { toast } from '@/components/ui/use-toast';
+import { getPrototypeById } from '@/utils/modelPrototypes';
 
 // Action types
 type ActionType = 
@@ -101,7 +103,10 @@ function reducer(state: AppState, action: ActionType): AppState {
         ...state,
         models: state.models.map(model => 
           model.id === action.payload.id 
-            ? { ...model, parameters: { ...model.parameters, ...action.payload.parameters } } 
+            ? { 
+                ...model, 
+                parameters: { ...model.parameters, ...action.payload.parameters } 
+              } 
             : model
         )
       };
@@ -162,6 +167,13 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       object: null
     };
     
+    // Create the Three.js object
+    const object = prototype.createModel(newModel.parameters);
+    if (object) {
+      object.userData.id = newModel.id;
+      newModel.object = object;
+    }
+    
     dispatch({ type: 'ADD_MODEL', payload: newModel });
     toast({
       title: "Model added",
@@ -183,6 +195,27 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateModelParameters = (id: string, parameters: Record<string, any>) => {
     dispatch({ type: 'UPDATE_MODEL_PARAMETERS', payload: { id, parameters } });
+    
+    // Update the 3D object based on new parameters
+    const model = state.models.find(m => m.id === id);
+    if (model) {
+      const prototype = getPrototypeById(model.prototypeId);
+      if (prototype) {
+        const updatedParams = { ...model.parameters, ...parameters };
+        const newObject = prototype.createModel(updatedParams);
+        if (newObject) {
+          newObject.userData.id = id;
+          newObject.position.copy(model.position);
+          newObject.rotation.copy(model.rotation);
+          newObject.scale.copy(model.scale);
+          
+          updateModel(id, { 
+            parameters: updatedParams,
+            object: newObject 
+          });
+        }
+      }
+    }
   };
 
   const updateModelTransform = (id: string, position?: Vector3, rotation?: Euler, scale?: Vector3) => {
@@ -191,6 +224,12 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const setModelVisibility = (id: string, visible: boolean) => {
     dispatch({ type: 'SET_MODEL_VISIBILITY', payload: { id, visible } });
+    
+    // Also update the object's visibility
+    const model = state.models.find(m => m.id === id);
+    if (model && model.object) {
+      model.object.visible = visible;
+    }
   };
 
   const updateModel = (id: string, updates: Partial<ModelInstance>) => {
@@ -200,6 +239,18 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deselectModel = () => {
     dispatch({ type: 'CLEAR_SELECTION' });
   };
+
+  // Update 3D objects when parameters change
+  useEffect(() => {
+    state.models.forEach(model => {
+      if (model.object) {
+        model.object.position.copy(model.position);
+        model.object.rotation.copy(model.rotation);
+        model.object.scale.copy(model.scale);
+        model.object.visible = model.visible;
+      }
+    });
+  }, [state.models]);
 
   return (
     <ModelContext.Provider 

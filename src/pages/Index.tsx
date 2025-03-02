@@ -1,9 +1,11 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ModelProvider } from '@/context/ModelContext';
 import { Button } from '@/components/ui/button';
 import { getAllPrototypes } from '@/utils/modelPrototypes';
 import { useModelContext } from '@/context/ModelContext';
+import ModelViewer from '@/components/ModelViewer';
+import { TransformMode } from '@/types';
 
 const ModelManager = () => {
   const { addModel } = useModelContext();
@@ -68,16 +70,77 @@ const ModelDisplayControls = () => {
 };
 
 const ModelParameterControls = () => {
-  // This component would handle parameter adjustments for the selected model
+  const { state, updateModelParameters } = useModelContext();
+  const { selectedModelId, models } = state;
+  
+  const selectedModel = models.find(model => model.id === selectedModelId);
+  const prototype = selectedModel ? getAllPrototypes().find(p => p.id === selectedModel.prototypeId) : null;
+  
+  if (!selectedModel || !prototype) {
+    return (
+      <div className="bg-white shadow rounded-lg p-4 mt-4">
+        <h2 className="text-lg font-medium mb-4">Parameters</h2>
+        <p className="text-gray-500">Select a model to adjust its parameters.</p>
+      </div>
+    );
+  }
+  
   return (
     <div className="bg-white shadow rounded-lg p-4 mt-4">
-      <h2 className="text-lg font-medium mb-4">Parameters</h2>
-      <p className="text-gray-500">Select a model to adjust its parameters.</p>
+      <h2 className="text-lg font-medium mb-4">Parameters for {selectedModel.name}</h2>
+      <div className="space-y-4">
+        {prototype.parameters.map(param => (
+          <div key={param.id} className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">{param.name}</label>
+            {param.type === 'number' ? (
+              <input
+                type="range"
+                min={param.min}
+                max={param.max}
+                step={param.step}
+                value={selectedModel.parameters[param.id]}
+                onChange={(e) => {
+                  updateModelParameters(selectedModel.id, {
+                    [param.id]: parseFloat(e.target.value)
+                  });
+                }}
+                className="w-full"
+              />
+            ) : param.type === 'select' ? (
+              <select
+                value={selectedModel.parameters[param.id]}
+                onChange={(e) => {
+                  updateModelParameters(selectedModel.id, {
+                    [param.id]: e.target.value
+                  });
+                }}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              >
+                {param.options?.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="text-sm text-gray-500">
+              {param.type === 'number' && (
+                <span>Value: {selectedModel.parameters[param.id]}</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
 
 const Index = () => {
+  const [transformMode] = useState<TransformMode>({
+    mode: 'translate',
+    space: 'world'
+  });
+
   return (
     <ModelProvider>
       <div className="min-h-screen bg-gray-100 p-4">
@@ -86,10 +149,7 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <div className="lg:col-span-3">
             <div className="bg-white shadow rounded-lg h-[600px]">
-              {/* This would be where the ModelViewer component would go */}
-              <div className="h-full flex items-center justify-center">
-                <p className="text-gray-500">ModelViewer component will be rendered here</p>
-              </div>
+              <ModelViewer transformMode={transformMode} />
             </div>
           </div>
           
