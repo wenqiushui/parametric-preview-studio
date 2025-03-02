@@ -128,7 +128,9 @@ const ModelViewer: React.FC = () => {
       });
       
       // Remove event listeners
-      transformControls.removeFromParent();
+      if (transformControls.parent) {
+        transformControls.parent.remove(transformControls);
+      }
       transformControls.dispose();
       
       // Dispose of renderer

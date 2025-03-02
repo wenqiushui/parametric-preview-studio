@@ -69,7 +69,8 @@ export function setupScene(container: HTMLElement): {
 
   // Add transform controls
   const transformControls = new TransformControls(camera, renderer.domElement);
-  scene.add(transformControls);
+  // Fix: Cast transformControls to Object3D for the add method
+  scene.add(transformControls as unknown as THREE.Object3D);
 
   // Transform controls override orbit controls when active
   transformControls.addEventListener('dragging-changed', (event) => {
