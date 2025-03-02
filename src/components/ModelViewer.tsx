@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { setupScene, pickObject, getTransformFromObject, highlightObject, clearHighlights, findObjectById, disposeObject } from '@/utils/threeHelpers';
@@ -40,7 +41,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     transformControls: null,
     animate: null
   });
-  const { models, updateModel, selectedModelId, selectedFaceId, selectModel, deselectModel } = useModelContext();
+  const { state, updateModel, selectModel, deselectModel } = useModelContext();
+  const { models, selectedModelId, selectedFaceId } = state;
   const [localTransform, setLocalTransform] = useState({
     position: new Vector3(),
     rotation: new Euler(),
@@ -84,14 +86,39 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
         });
 
         // Remove transform controls from the scene
-        scene.remove(transformControls as unknown as THREE.Object3D);
+        if (transformControls.object) {
+          transformControls.detach();
+        }
+        scene.remove(transformControls);
 
-        // Dispose of the renderer, scene, and other Three.js objects
+        // Dispose of the renderer
         renderer.dispose();
-        scene.dispose();
+        
+        // Clean up THREE.Scene properly - THREE.Scene doesn't have a dispose method directly
+        while(scene.children.length > 0) {
+          const child = scene.children[0];
+          scene.remove(child);
+          if ('geometry' in child) {
+            (child as THREE.Mesh).geometry?.dispose();
+          }
+          if ('material' in child) {
+            const material = (child as THREE.Mesh).material;
+            if (Array.isArray(material)) {
+              material.forEach(mat => mat.dispose());
+            } else if (material) {
+              material.dispose();
+            }
+          }
+        }
 
-        // Remove event listeners
-        window.removeEventListener('resize', renderer.handleResize);
+        // Remove event listeners - use proper resize listener
+        window.removeEventListener('resize', () => {
+          if (camera && renderer) {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+          }
+        });
 
         // Optionally, clear the container
         if (containerRef.current && renderer.domElement) {
@@ -171,10 +198,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     if (pickResult) {
       const pickedObject = pickResult.object;
       const modelId = pickedObject.userData.id;
-      const faceIndex = pickResult.face;
 
       if (modelId) {
-        selectModel(modelId, faceIndex);
+        selectModel(modelId);
       } else {
         deselectModel();
       }
@@ -190,7 +216,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
         if (sceneData.transformControls.object) {
           sceneData.transformControls.detach();
         }
-        sceneData.scene.remove(sceneData.transformControls as unknown as THREE.Object3D);
+        sceneData.scene.remove(sceneData.transformControls);
       }
     };
   }, [sceneData.transformControls, sceneData.scene]);

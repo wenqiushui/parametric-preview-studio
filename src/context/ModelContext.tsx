@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { Vector3, Euler } from 'three';
 import { AppState, ModelInstance, ModelPrototype } from '@/types';
@@ -133,6 +132,11 @@ interface ModelContextType {
   updateModelParameters: (id: string, parameters: Record<string, any>) => void;
   updateModelTransform: (id: string, position?: Vector3, rotation?: Euler, scale?: Vector3) => void;
   setModelVisibility: (id: string, visible: boolean) => void;
+  deselectModel: () => void;
+  updateModel: (id: string, updates: Partial<ModelInstance>) => void;
+  models: ModelInstance[];
+  selectedModelId: string | null;
+  selectedFaceId: string | null;
 }
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
@@ -189,6 +193,14 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     dispatch({ type: 'SET_MODEL_VISIBILITY', payload: { id, visible } });
   };
 
+  const updateModel = (id: string, updates: Partial<ModelInstance>) => {
+    dispatch({ type: 'UPDATE_MODEL', payload: { id, updates } });
+  };
+
+  const deselectModel = () => {
+    dispatch({ type: 'CLEAR_SELECTION' });
+  };
+
   return (
     <ModelContext.Provider 
       value={{ 
@@ -199,7 +211,12 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         selectModel,
         updateModelParameters,
         updateModelTransform,
-        setModelVisibility
+        setModelVisibility,
+        deselectModel,
+        updateModel,
+        models: state.models,
+        selectedModelId: state.selectedModelId,
+        selectedFaceId: state.selectedFaceId
       }}
     >
       {children}
