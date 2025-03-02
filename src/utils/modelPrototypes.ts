@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { getMaterialById } from './materialLibrary';
 import { ModelPrototype } from '@/types';
@@ -26,6 +25,7 @@ const modelPrototypes: ModelPrototype[] = [
     id: 'desk-basic',
     name: 'Basic Desk',
     description: 'A simple rectangular desk',
+    category: 'Furniture', // Added category
     parameters: [
       {
         id: 'width',
@@ -108,6 +108,7 @@ const modelPrototypes: ModelPrototype[] = [
     id: 'desk-drawer',
     name: 'Desk with Drawer',
     description: 'A desk with a drawer unit',
+    category: 'Furniture', // Added category
     parameters: [
       {
         id: 'width',
@@ -230,6 +231,7 @@ const modelPrototypes: ModelPrototype[] = [
     id: 'bookshelf',
     name: 'Bookshelf',
     description: 'A vertical bookshelf with adjustable shelves',
+    category: 'Furniture', // Added category
     parameters: [
       {
         id: 'width',

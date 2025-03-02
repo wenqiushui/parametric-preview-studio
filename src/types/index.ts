@@ -23,6 +23,7 @@ export interface ModelPrototype {
   id: string;
   name: string;
   description: string;
+  category: string; // Added category property
   parameters: ParameterDefinition[];
   createModel: (params: Record<string, any>) => Promise<THREE.Object3D> | THREE.Object3D;
   updateModel?: (object: THREE.Object3D, params: Record<string, any>) => Promise<void> | void;

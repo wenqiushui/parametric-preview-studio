@@ -1,429 +1,326 @@
-
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { setupScene, pickObject, getTransformFromObject, highlightObject, clearHighlights, findObjectById, disposeObject } from '@/utils/threeHelpers';
 import { useModelContext } from '@/context/ModelContext';
-import { getPrototypeById } from '@/utils/modelPrototypes';
-import { 
-  setupScene, 
-  pickObject, 
-  highlightObject, 
-  clearHighlights,
-  getTransformFromObject,
-  findObjectById
-} from '@/utils/threeHelpers';
+import { ModelInstance } from '@/types';
 import { TransformMode } from '@/types';
+import { Vector3, Euler } from 'three';
 import { Button } from '@/components/ui/button';
-import { 
-  MoveHorizontal, 
-  RotateCcw, 
-  Maximize, 
-  Minimize,
-  AlignHorizontalJustifyCenter as XIcon, 
-  AlignVerticalJustifyCenter as YIcon, 
-  Box as ZIcon,
-  Boxes as CubeIcon 
-} from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { cn } from "@/lib/utils"
+import { format } from "date-fns"
+import { CalendarIcon } from "lucide-react"
 
-const ModelViewer: React.FC = () => {
+interface ModelViewerProps {
+  transformMode: TransformMode;
+}
+
+const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
-  const transformControlsRef = useRef<TransformControls | null>(null);
-  const modelGroupRef = useRef<THREE.Group | null>(null);
-  
-  const [transformMode, setTransformMode] = useState<TransformMode>({
-    mode: 'translate',
-    space: 'world',
-    axis: 'xyz'
+  const [sceneData, setSceneData] = useState<{
+    scene: THREE.Scene | null;
+    camera: THREE.PerspectiveCamera | null;
+    renderer: THREE.WebGLRenderer | null;
+    controls: any | null;
+    transformControls: any | null;
+    animate: (() => void) | null;
+  }>({
+    scene: null,
+    camera: null,
+    renderer: null,
+    controls: null,
+    transformControls: null,
+    animate: null
   });
-  
-  const [isLoading, setIsLoading] = useState(true);
-  
-  const { state, dispatch, updateModelTransform } = useModelContext();
-  
-  // Initialize the scene
+  const { models, updateModel, selectedModelId, selectedFaceId, selectModel, deselectModel } = useModelContext();
+  const [localTransform, setLocalTransform] = useState({
+    position: new Vector3(),
+    rotation: new Euler(),
+    scale: new Vector3(1, 1, 1)
+  });
+  const [date, setDate] = useState<Date | undefined>(new Date())
+
+  // Initialize scene
   useEffect(() => {
-    if (!containerRef.current) return;
-    
-    setIsLoading(true);
-    
-    // Setup the scene
-    const { 
-      scene, 
-      camera, 
-      renderer, 
-      controls, 
-      transformControls, 
-      animate 
-    } = setupScene(containerRef.current);
-    
-    // Store refs
-    sceneRef.current = scene;
-    cameraRef.current = camera;
-    rendererRef.current = renderer;
-    controlsRef.current = controls;
-    transformControlsRef.current = transformControls;
-    
-    // Create a group to hold all the models
-    const modelGroup = new THREE.Group();
-    modelGroup.name = 'Models';
-    scene.add(modelGroup);
-    modelGroupRef.current = modelGroup;
-    
-    // Add a ground plane
-    const groundGeometry = new THREE.PlaneGeometry(20, 20);
-    const groundMaterial = new THREE.MeshStandardMaterial({
-      color: 0xeeeeee,
-      roughness: 0.9,
-      metalness: 0.1,
-      side: THREE.DoubleSide
-    });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.01;
-    ground.receiveShadow = true;
-    ground.name = 'Ground';
-    scene.add(ground);
-    
-    // Set transform controls to selected object when it changes
-    transformControls.addEventListener('objectChange', () => {
-      if (!transformControls.object) return;
-      
-      const object = transformControls.object;
-      if (!object.userData.id) return;
-      
-      const transform = getTransformFromObject(object);
-      updateModelTransform(
-        object.userData.id,
-        transform.position,
-        transform.rotation,
-        transform.scale
-      );
-    });
-    
-    // Start animation loop
-    animate();
-    
-    setIsLoading(false);
-    
-    // Cleanup on unmount
-    return () => {
-      // Stop animation loop
-      cancelAnimationFrame(0);
-      
-      // Dispose of all objects
-      scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose();
-          if (Array.isArray(object.material)) {
-            object.material.forEach(material => material.dispose());
-          } else {
-            object.material.dispose();
-          }
+    if (containerRef.current) {
+      const { scene, camera, renderer, controls, transformControls, animate } = setupScene(containerRef.current);
+      setSceneData({ scene, camera, renderer, controls, transformControls, animate });
+      animate();
+
+      // Initial model load
+      models.forEach(model => {
+        if (model.object) {
+          scene.add(model.object);
         }
       });
-      
-      // Remove event listeners
-      if (transformControls.parent) {
-        transformControls.parent.remove(transformControls);
-      }
-      transformControls.dispose();
-      
-      // Dispose of renderer
-      renderer.dispose();
-      
-      // Remove canvas
-      if (containerRef.current && renderer.domElement) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
-    };
+
+      // Transform controls setup
+      transformControls.addEventListener('objectChange', () => {
+        if (transformControls.object) {
+          const newTransform = getTransformFromObject(transformControls.object);
+          updateModel(transformControls.object.userData.id, newTransform);
+          
+          // Update local transform state
+          setSceneData(prev => ({
+            ...prev,
+            scene: sceneData.scene
+          }));
+          setLocalTransform(newTransform);
+        }
+      });
+
+      return () => {
+        // Dispose of all objects in the scene
+        scene.traverse((object) => {
+          disposeObject(object);
+        });
+
+        // Remove transform controls from the scene
+        scene.remove(transformControls as unknown as THREE.Object3D);
+
+        // Dispose of the renderer, scene, and other Three.js objects
+        renderer.dispose();
+        scene.dispose();
+
+        // Remove event listeners
+        window.removeEventListener('resize', renderer.handleResize);
+
+        // Optionally, clear the container
+        if (containerRef.current && renderer.domElement) {
+          containerRef.current.removeChild(renderer.domElement);
+        }
+      };
+    }
   }, []);
-  
-  // Update object selection when selected model changes
+
+  // Update scene with models from context
   useEffect(() => {
-    if (!sceneRef.current || !transformControlsRef.current) return;
+    if (sceneData.scene) {
+      // Clear existing models
+      sceneData.scene.children = sceneData.scene.children.filter(child => !(child as THREE.Mesh).geometry);
+
+      // Add models from context
+      models.forEach(model => {
+        if (model.object) {
+          sceneData.scene.add(model.object);
+        }
+      });
+    }
+  }, [models, sceneData.scene]);
+
+  // Update transform mode
+  useEffect(() => {
+    if (sceneData.transformControls) {
+      sceneData.transformControls.mode = transformMode.mode;
+      sceneData.transformControls.space = transformMode.space;
+    }
+  }, [transformMode, sceneData.transformControls]);
+
+  // Update selected object
+  useEffect(() => {
+    if (!sceneData.scene || !sceneData.transformControls) return;
     
-    // Clear all highlights
-    clearHighlights(sceneRef.current);
+    // Clear previous highlights
+    clearHighlights(sceneData.scene);
     
-    // If there's a selected model, highlight it and attach transform controls
-    if (state.selectedModelId) {
-      const selectedObject = findObjectById(sceneRef.current, state.selectedModelId);
+    if (selectedModelId) {
+      const selectedObject = findObjectById(sceneData.scene, selectedModelId);
       
       if (selectedObject) {
-        highlightObject(selectedObject);
-        transformControlsRef.current.attach(selectedObject);
-      } else {
-        transformControlsRef.current.detach();
+        // Detach any existing object
+        if (sceneData.transformControls.object) {
+          sceneData.transformControls.detach();
+        }
+        
+        // Attach the new object
+        sceneData.transformControls.attach(selectedObject);
+        
+        // Highlight the selected object
+        highlightObject(selectedObject, selectedFaceId);
+        
+        // Update local transform state
+        setLocalTransform(getTransformFromObject(selectedObject));
       }
     } else {
-      transformControlsRef.current.detach();
+      // Detach if no model is selected
+      if (sceneData.transformControls.object) {
+        sceneData.transformControls.detach();
+      }
     }
-  }, [state.selectedModelId]);
-  
-  // Update transform controls mode
-  useEffect(() => {
-    if (!transformControlsRef.current) return;
-    
-    transformControlsRef.current.setMode(transformMode.mode);
-    transformControlsRef.current.setSpace(transformMode.space);
-    
-    // Set axis constraints
-    transformControlsRef.current.showX = transformMode.axis.includes('x');
-    transformControlsRef.current.showY = transformMode.axis.includes('y');
-    transformControlsRef.current.showZ = transformMode.axis.includes('z');
-  }, [transformMode]);
-  
-  // Update model visibility
-  useEffect(() => {
-    if (!sceneRef.current || !modelGroupRef.current) return;
-    
-    state.models.forEach(model => {
-      const object = findObjectById(sceneRef.current!, model.id);
-      if (object) {
-        object.visible = model.visible;
-      }
-    });
-  }, [state.models]);
-  
-  // Load or update models when they change
-  useEffect(() => {
-    if (!sceneRef.current || !modelGroupRef.current) return;
-    
-    const loadModels = async () => {
-      setIsLoading(true);
-      
-      // Process each model
-      for (const model of state.models) {
-        // Check if the model already exists in the scene
-        let object = findObjectById(sceneRef.current!, model.id);
-        
-        // If the model doesn't exist, create it
-        if (!object) {
-          const prototype = getPrototypeById(model.prototypeId);
-          if (!prototype) continue;
-          
-          const newObject = await prototype.createModel(model.parameters);
-          newObject.userData.id = model.id;
-          newObject.name = model.name;
-          newObject.position.copy(model.position);
-          newObject.rotation.copy(model.rotation);
-          newObject.scale.copy(model.scale);
-          newObject.visible = model.visible;
-          
-          modelGroupRef.current!.add(newObject);
-        }
-        // If the model exists but needs updating
-        else if (model.object !== object) {
-          const prototype = getPrototypeById(model.prototypeId);
-          if (!prototype || !prototype.updateModel) continue;
-          
-          await prototype.updateModel(object, model.parameters);
-          object.position.copy(model.position);
-          object.rotation.copy(model.rotation);
-          object.scale.copy(model.scale);
-          object.visible = model.visible;
-        }
-      }
-      
-      // Remove models that no longer exist in the state
-      const objectsToRemove: THREE.Object3D[] = [];
-      modelGroupRef.current!.traverse((object) => {
-        if (object.userData.id && !state.models.find(m => m.id === object.userData.id)) {
-          objectsToRemove.push(object);
-        }
-      });
-      
-      objectsToRemove.forEach(object => {
-        object.removeFromParent();
-      });
-      
-      setIsLoading(false);
-    };
-    
-    loadModels();
-  }, [state.models]);
-  
-  // Handle mouse selection
-  const handleMouseDown = (event: React.MouseEvent) => {
-    if (!sceneRef.current || !cameraRef.current || !containerRef.current) return;
-    
-    // Skip if transform controls are active
-    if (transformControlsRef.current?.dragging) return;
-    
-    const result = pickObject(
-      event.nativeEvent, 
-      containerRef.current, 
-      cameraRef.current, 
-      sceneRef.current
+  }, [selectedModelId, selectedFaceId, sceneData, models]);
+
+  // Handle object picking
+  const handlePointerDown = useCallback((event: React.PointerEvent) => {
+    if (!containerRef.current || !sceneData.camera || !sceneData.scene) return;
+
+    const pickResult = pickObject(
+      event.nativeEvent as MouseEvent,
+      containerRef.current,
+      sceneData.camera,
+      sceneData.scene
     );
-    
-    if (result) {
-      // Skip if ground or model group was picked
-      if (result.object.name === 'Ground' || result.object.name === 'Models') {
-        dispatch({ type: 'CLEAR_SELECTION' });
-        return;
-      }
-      
-      // Find the model or parent with an ID
-      let current: THREE.Object3D | null = result.object;
-      while (current && !current.userData.id) {
-        current = current.parent;
-      }
-      
-      if (current && current.userData.id) {
-        // If a model was clicked, select it
-        dispatch({ type: 'SELECT_MODEL', payload: current.userData.id });
-        
-        // If a face was clicked, select it
-        if (result.isFace) {
-          const faceId = `${current.userData.id}_face_${result.face}`;
-          dispatch({ type: 'SELECT_FACE', payload: faceId });
-        }
+
+    if (pickResult) {
+      const pickedObject = pickResult.object;
+      const modelId = pickedObject.userData.id;
+      const faceIndex = pickResult.face;
+
+      if (modelId) {
+        selectModel(modelId, faceIndex);
       } else {
-        // If nothing was clicked, clear selection
-        dispatch({ type: 'CLEAR_SELECTION' });
+        deselectModel();
       }
     } else {
-      // If nothing was clicked, clear selection
-      dispatch({ type: 'CLEAR_SELECTION' });
+      deselectModel();
     }
-  };
-  
-  // Toggle transform mode between translate, rotate, and scale
-  const toggleTransformMode = (mode: 'translate' | 'rotate' | 'scale') => {
-    setTransformMode(prev => ({
-      ...prev,
-      mode
-    }));
-  };
-  
-  // Toggle transform space between world and local
-  const toggleTransformSpace = () => {
-    setTransformMode(prev => ({
-      ...prev,
-      space: prev.space === 'world' ? 'local' : 'world'
-    }));
-  };
-  
-  // Set transform axis
-  const setTransformAxis = (axis: 'x' | 'y' | 'z' | 'xy' | 'xz' | 'yz' | 'xyz') => {
-    setTransformMode(prev => ({
-      ...prev,
-      axis
-    }));
-  };
-  
+  }, [sceneData, selectModel, deselectModel]);
+
+  // Detach transform controls on unmount
+  useEffect(() => {
+    return () => {
+      if (sceneData.transformControls && sceneData.scene) {
+        if (sceneData.transformControls.object) {
+          sceneData.transformControls.detach();
+        }
+        sceneData.scene.remove(sceneData.transformControls as unknown as THREE.Object3D);
+      }
+    };
+  }, [sceneData.transformControls, sceneData.scene]);
+
   return (
-    <div className="relative flex-1 min-h-[500px] overflow-hidden rounded-lg border">
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-50">
-          <div className="animate-pulse-subtle">
-            <CubeIcon className="h-10 w-10 text-primary animate-spin" />
-            <p className="mt-2 text-sm text-muted-foreground">Loading models...</p>
-          </div>
-        </div>
-      )}
-      
+    <div className="flex h-full w-full">
       <div 
-        ref={containerRef} 
-        className="model-viewer-container"
-        onMouseDown={handleMouseDown}
-      />
-      
-      {/* Transform controls */}
-      {state.selectedModelId && (
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-full p-1 shadow-md border space-x-1">
-          <div className="flex items-center rounded-full bg-secondary/50 p-1">
-            <Button
-              size="icon"
-              variant={transformMode.mode === 'translate' ? 'default' : 'ghost'}
-              className="h-8 w-8 rounded-full"
-              onClick={() => toggleTransformMode('translate')}
-              title="Translate (Move)"
-            >
-              <MoveHorizontal className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={transformMode.mode === 'rotate' ? 'default' : 'ghost'}
-              className="h-8 w-8 rounded-full"
-              onClick={() => toggleTransformMode('rotate')}
-              title="Rotate"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={transformMode.mode === 'scale' ? 'default' : 'ghost'}
-              className="h-8 w-8 rounded-full"
-              onClick={() => toggleTransformMode('scale')}
-              title="Scale"
-            >
-              {transformMode.mode === 'scale' ? (
-                <Minimize className="h-4 w-4" />
-              ) : (
-                <Maximize className="h-4 w-4" />
-              )}
-            </Button>
+        className="model-viewer w-4/5 h-full bg-base-200 rounded-xl overflow-hidden"
+        ref={containerRef}
+        onPointerDown={handlePointerDown}
+      >
+      </div>
+      <div className="w-1/5 p-4">
+        <h3 className="text-md font-semibold mb-2">Local Transform</h3>
+          <div className="mb-4">
+            <Label htmlFor="positionX" className="block text-sm font-medium text-gray-700">Position X</Label>
+            <Input
+              type="number"
+              id="positionX"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.position.x}
+              disabled
+            />
           </div>
-          
-          <div className="flex items-center rounded-full bg-secondary/50 p-1">
-            <Button
-              size="icon"
-              variant={transformMode.axis === 'x' ? 'default' : 'ghost'}
-              className="h-8 w-8 rounded-full text-red-500"
-              onClick={() => setTransformAxis('x')}
-              title="X Axis"
-            >
-              <XIcon className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={transformMode.axis === 'y' ? 'default' : 'ghost'}
-              className="h-8 w-8 rounded-full text-green-500"
-              onClick={() => setTransformAxis('y')}
-              title="Y Axis"
-            >
-              <YIcon className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={transformMode.axis === 'z' ? 'default' : 'ghost'}
-              className="h-8 w-8 rounded-full text-blue-500"
-              onClick={() => setTransformAxis('z')}
-              title="Z Axis"
-            >
-              <ZIcon className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={transformMode.axis === 'xyz' ? 'default' : 'ghost'}
-              className="h-8 w-8 rounded-full"
-              onClick={() => setTransformAxis('xyz')}
-              title="All Axes"
-            >
-              <CubeIcon className="h-4 w-4" />
-            </Button>
+          <div className="mb-4">
+            <Label htmlFor="positionY" className="block text-sm font-medium text-gray-700">Position Y</Label>
+            <Input
+              type="number"
+              id="positionY"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.position.y}
+              disabled
+            />
           </div>
-          
-          <div className="flex items-center rounded-full bg-secondary/50 p-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 px-3 rounded-full text-xs"
-              onClick={toggleTransformSpace}
-              title="Toggle Space"
-            >
-              {transformMode.space === 'world' ? 'World' : 'Local'}
-            </Button>
+          <div className="mb-4">
+            <Label htmlFor="positionZ" className="block text-sm font-medium text-gray-700">Position Z</Label>
+            <Input
+              type="number"
+              id="positionZ"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.position.z}
+              disabled
+            />
           </div>
-        </div>
-      )}
+          <div className="mb-4">
+            <Label htmlFor="rotationX" className="block text-sm font-medium text-gray-700">Rotation X</Label>
+            <Input
+              type="number"
+              id="rotationX"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.rotation.x}
+              disabled
+            />
+          </div>
+          <div className="mb-4">
+            <Label htmlFor="rotationY" className="block text-sm font-medium text-gray-700">Rotation Y</Label>
+            <Input
+              type="number"
+              id="rotationY"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.rotation.y}
+              disabled
+            />
+          </div>
+          <div className="mb-4">
+            <Label htmlFor="rotationZ" className="block text-sm font-medium text-gray-700">Rotation Z</Label>
+            <Input
+              type="number"
+              id="rotationZ"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.rotation.z}
+              disabled
+            />
+          </div>
+          <div className="mb-4">
+            <Label htmlFor="scaleX" className="block text-sm font-medium text-gray-700">Scale X</Label>
+            <Input
+              type="number"
+              id="scaleX"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.scale.x}
+              disabled
+            />
+          </div>
+          <div className="mb-4">
+            <Label htmlFor="scaleY" className="block text-sm font-medium text-gray-700">Scale Y</Label>
+            <Input
+              type="number"
+              id="scaleY"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.scale.y}
+              disabled
+            />
+          </div>
+          <div className="mb-4">
+            <Label htmlFor="scaleZ" className="block text-sm font-medium text-gray-700">Scale Z</Label>
+            <Input
+              type="number"
+              id="scaleZ"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              value={localTransform.scale.z}
+              disabled
+            />
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn(
+                  "w-[240px] justify-start text-left font-normal",
+                  !date && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {date ? format(date, "PPP") : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={setDate}
+                disabled={(date) =>
+                  date > new Date() || date < new Date("1900-01-01")
+                }
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+      </div>
     </div>
   );
 };
