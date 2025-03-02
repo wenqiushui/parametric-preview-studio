@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { Vector3, Euler } from 'three';
 import { AppState, ModelInstance, ModelPrototype } from '@/types';
@@ -182,6 +181,15 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const removeModel = (id: string) => {
+    const modelToRemove = state.models.find(m => m.id === id);
+    
+    if (modelToRemove && modelToRemove.object) {
+      // Make sure to remove the object from its parent (the scene)
+      if (modelToRemove.object.parent) {
+        modelToRemove.object.parent.remove(modelToRemove.object);
+      }
+    }
+    
     dispatch({ type: 'REMOVE_MODEL', payload: id });
     toast({
       title: "Model removed",
@@ -220,6 +228,14 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateModelTransform = (id: string, position?: Vector3, rotation?: Euler, scale?: Vector3) => {
     dispatch({ type: 'UPDATE_MODEL_TRANSFORM', payload: { id, position, rotation, scale } });
+    
+    // Also update the actual 3D object
+    const model = state.models.find(m => m.id === id);
+    if (model && model.object) {
+      if (position) model.object.position.copy(position);
+      if (rotation) model.object.rotation.copy(rotation);
+      if (scale) model.object.scale.copy(scale);
+    }
   };
 
   const setModelVisibility = (id: string, visible: boolean) => {
@@ -240,10 +256,11 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     dispatch({ type: 'CLEAR_SELECTION' });
   };
 
-  // Update 3D objects when parameters change
+  // Update 3D objects when models change
   useEffect(() => {
     state.models.forEach(model => {
       if (model.object) {
+        // Ensure object transforms match model data
         model.object.position.copy(model.position);
         model.object.rotation.copy(model.rotation);
         model.object.scale.copy(model.scale);

@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -69,7 +68,6 @@ export function setupScene(container: HTMLElement): {
 
   // Add transform controls
   const transformControls = new TransformControls(camera, renderer.domElement);
-  // Fix: Cast transformControls to Object3D for the add method
   scene.add(transformControls as unknown as THREE.Object3D);
 
   // Transform controls override orbit controls when active
@@ -115,7 +113,17 @@ export function pickObject(
   const mousePosition = new THREE.Vector2(x, y);
   raycaster.setFromCamera(mousePosition, camera);
 
-  const intersects = raycaster.intersectObjects(scene.children, true);
+  // Get all selectable objects (exclude grid, lights, etc.)
+  const selectableObjects: THREE.Object3D[] = [];
+  scene.traverse((object) => {
+    // Only include objects that have a userData.id property
+    // or are children of objects with a userData.id property
+    if (object.userData && object.userData.id) {
+      selectableObjects.push(object);
+    }
+  });
+
+  const intersects = raycaster.intersectObjects(selectableObjects, true);
 
   if (intersects.length > 0) {
     const intersect = intersects[0];

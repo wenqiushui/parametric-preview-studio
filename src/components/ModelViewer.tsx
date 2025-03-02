@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { setupScene, pickObject, getTransformFromObject, highlightObject, clearHighlights, findObjectById, disposeObject } from '@/utils/threeHelpers';
@@ -40,7 +41,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     transformControls: null,
     animate: null
   });
-  const { state, dispatch, updateModel, selectModel, deselectModel } = useModelContext();
+  const { state, dispatch, updateModel, selectModel, deselectModel, updateModelTransform } = useModelContext();
   const { models, selectedModelId, selectedFaceId } = state;
   const [localTransform, setLocalTransform] = useState({
     position: new Vector3(),
@@ -55,21 +56,29 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
       setSceneData({ scene, camera, renderer, controls, transformControls, animate });
       animate();
 
+      // Add existing models to the scene
       models.forEach(model => {
         if (model.object) {
           scene.add(model.object);
         }
       });
 
+      // Handle transform control updates
       transformControls.addEventListener('objectChange', () => {
         if (transformControls.object) {
           const newTransform = getTransformFromObject(transformControls.object);
-          updateModel(transformControls.object.userData.id, newTransform);
+          const modelId = transformControls.object.userData.id;
           
-          setSceneData(prev => ({
-            ...prev,
-            scene: sceneData.scene
-          }));
+          // Update both the model data and the 3D object
+          if (modelId) {
+            updateModelTransform(
+              modelId,
+              newTransform.position,
+              newTransform.rotation,
+              newTransform.scale
+            );
+          }
+          
           setLocalTransform(newTransform);
         }
       });
@@ -117,17 +126,38 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     }
   }, []);
 
+  // Update scene when models change
   useEffect(() => {
     if (sceneData.scene) {
-      sceneData.scene.children = sceneData.scene.children.filter(child => !(child as THREE.Mesh).geometry);
+      // Remove models from scene (only remove model objects, not lights, grid, etc.)
+      const objectsToRemove: THREE.Object3D[] = [];
+      sceneData.scene.traverse((object) => {
+        if (object.userData && object.userData.id && 
+            !models.some(model => model.id === object.userData.id)) {
+          objectsToRemove.push(object);
+        }
+      });
+      
+      objectsToRemove.forEach(obj => {
+        sceneData.scene?.remove(obj);
+      });
+      
+      // Add all current models to scene
       models.forEach(model => {
-        if (model.object) {
-          sceneData.scene.add(model.object);
+        if (model.object && !sceneData.scene?.getObjectById(model.object.id)) {
+          sceneData.scene?.add(model.object);
+          
+          // Ensure transforms are correct
+          model.object.position.copy(model.position);
+          model.object.rotation.copy(model.rotation);
+          model.object.scale.copy(model.scale);
+          model.object.visible = model.visible;
         }
       });
     }
   }, [models, sceneData.scene]);
 
+  // Update transform controls mode
   useEffect(() => {
     if (sceneData.transformControls) {
       sceneData.transformControls.mode = transformMode.mode;
@@ -135,6 +165,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     }
   }, [transformMode, sceneData.transformControls]);
 
+  // Handle selection changes
   useEffect(() => {
     if (!sceneData.scene || !sceneData.transformControls) return;
     
@@ -150,7 +181,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
         
         sceneData.transformControls.attach(selectedObject);
         
-        highlightObject(selectedObject, selectedFaceId ? parseInt(selectedFaceId) : undefined);
+        // Convert selectedFaceId to a number if it exists
+        const faceIndex = selectedFaceId ? parseInt(selectedFaceId) : undefined;
+        highlightObject(selectedObject, faceIndex);
         
         setLocalTransform(getTransformFromObject(selectedObject));
       }
@@ -159,7 +192,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
         sceneData.transformControls.detach();
       }
     }
-  }, [selectedModelId, selectedFaceId, sceneData, models]);
+  }, [selectedModelId, selectedFaceId, sceneData]);
 
   const handlePointerDown = useCallback((event: React.PointerEvent) => {
     if (!containerRef.current || !sceneData.camera || !sceneData.scene) return;
@@ -173,10 +206,24 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
 
     if (pickResult) {
       const pickedObject = pickResult.object;
-      const modelId = pickedObject.userData.id;
-
+      
+      // Traverse up the object hierarchy to find the root model object
+      let currentObject: THREE.Object3D | null = pickedObject;
+      let modelId = null;
+      
+      while (currentObject && !modelId) {
+        if (currentObject.userData && currentObject.userData.id) {
+          modelId = currentObject.userData.id;
+          break;
+        }
+        currentObject = currentObject.parent;
+      }
+      
       if (modelId) {
         selectModel(modelId);
+        
+        // Log for debugging
+        console.log('Selected model:', modelId);
       } else {
         deselectModel();
       }
