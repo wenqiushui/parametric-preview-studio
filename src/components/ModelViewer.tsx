@@ -20,10 +20,10 @@ import {
   RotateCcw, 
   Maximize, 
   Minimize,
-  X, 
-  Y, 
-  Z,
-  Cube 
+  AlignHorizontalJustifyCenter as XIcon, 
+  AlignVerticalJustifyCenter as YIcon, 
+  Box as ZIcon,
+  Boxes as CubeIcon 
 } from 'lucide-react';
 
 const ModelViewer: React.FC = () => {
@@ -321,7 +321,7 @@ const ModelViewer: React.FC = () => {
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-50">
           <div className="animate-pulse-subtle">
-            <Cube className="h-10 w-10 text-primary animate-spin" />
+            <CubeIcon className="h-10 w-10 text-primary animate-spin" />
             <p className="mt-2 text-sm text-muted-foreground">Loading models...</p>
           </div>
         </div>
@@ -378,7 +378,7 @@ const ModelViewer: React.FC = () => {
               onClick={() => setTransformAxis('x')}
               title="X Axis"
             >
-              <X className="h-4 w-4" />
+              <XIcon className="h-4 w-4" />
             </Button>
             <Button
               size="icon"
@@ -387,7 +387,7 @@ const ModelViewer: React.FC = () => {
               onClick={() => setTransformAxis('y')}
               title="Y Axis"
             >
-              <Y className="h-4 w-4" />
+              <YIcon className="h-4 w-4" />
             </Button>
             <Button
               size="icon"
@@ -396,7 +396,7 @@ const ModelViewer: React.FC = () => {
               onClick={() => setTransformAxis('z')}
               title="Z Axis"
             >
-              <Z className="h-4 w-4" />
+              <ZIcon className="h-4 w-4" />
             </Button>
             <Button
               size="icon"
@@ -405,7 +405,7 @@ const ModelViewer: React.FC = () => {
               onClick={() => setTransformAxis('xyz')}
               title="All Axes"
             >
-              <Cube className="h-4 w-4" />
+              <CubeIcon className="h-4 w-4" />
             </Button>
           </div>
           
