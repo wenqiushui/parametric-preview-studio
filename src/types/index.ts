@@ -48,10 +48,10 @@ export interface TransformMode {
 
 // Add the missing interfaces
 export interface PickResult {
-  object: THREE.Object3D;
+  object: Object3D;
   face?: number;
   faceIndex?: number;
-  point: THREE.Vector3;
+  point: Vector3;
   distance: number;
   isFace: boolean;
 }
