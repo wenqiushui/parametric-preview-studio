@@ -1,11 +1,10 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { setupScene, pickObject, getTransformFromObject, highlightObject, clearHighlights, findObjectById, disposeObject } from '@/utils/threeHelpers';
 import { useModelContext } from '@/context/ModelContext';
 import { ModelInstance } from '@/types';
 import { TransformMode } from '@/types';
-import { Vector3, Euler } from 'three';
+import { Vector3, Euler, Object3D } from 'three';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,27 +49,23 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
   });
   const [date, setDate] = useState<Date | undefined>(new Date())
 
-  // Initialize scene
   useEffect(() => {
     if (containerRef.current) {
       const { scene, camera, renderer, controls, transformControls, animate } = setupScene(containerRef.current);
       setSceneData({ scene, camera, renderer, controls, transformControls, animate });
       animate();
 
-      // Initial model load
       models.forEach(model => {
         if (model.object) {
           scene.add(model.object);
         }
       });
 
-      // Transform controls setup
       transformControls.addEventListener('objectChange', () => {
         if (transformControls.object) {
           const newTransform = getTransformFromObject(transformControls.object);
           updateModel(transformControls.object.userData.id, newTransform);
           
-          // Update local transform state
           setSceneData(prev => ({
             ...prev,
             scene: sceneData.scene
@@ -80,21 +75,17 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
       });
 
       return () => {
-        // Dispose of all objects in the scene
         scene.traverse((object) => {
           disposeObject(object);
         });
 
-        // Remove transform controls from the scene
         if (transformControls.object) {
           transformControls.detach();
         }
-        scene.remove(transformControls);
+        scene.remove(transformControls as unknown as Object3D);
 
-        // Dispose of the renderer
         renderer.dispose();
         
-        // Clean up THREE.Scene properly - THREE.Scene doesn't have a dispose method directly
         while(scene.children.length > 0) {
           const child = scene.children[0];
           scene.remove(child);
@@ -111,7 +102,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
           }
         }
 
-        // Remove event listeners - use proper resize listener
         window.removeEventListener('resize', () => {
           if (camera && renderer) {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -120,7 +110,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
           }
         });
 
-        // Optionally, clear the container
         if (containerRef.current && renderer.domElement) {
           containerRef.current.removeChild(renderer.domElement);
         }
@@ -128,13 +117,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     }
   }, []);
 
-  // Update scene with models from context
   useEffect(() => {
     if (sceneData.scene) {
-      // Clear existing models
       sceneData.scene.children = sceneData.scene.children.filter(child => !(child as THREE.Mesh).geometry);
-
-      // Add models from context
       models.forEach(model => {
         if (model.object) {
           sceneData.scene.add(model.object);
@@ -143,7 +128,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     }
   }, [models, sceneData.scene]);
 
-  // Update transform mode
   useEffect(() => {
     if (sceneData.transformControls) {
       sceneData.transformControls.mode = transformMode.mode;
@@ -151,40 +135,32 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     }
   }, [transformMode, sceneData.transformControls]);
 
-  // Update selected object
   useEffect(() => {
     if (!sceneData.scene || !sceneData.transformControls) return;
     
-    // Clear previous highlights
     clearHighlights(sceneData.scene);
     
     if (selectedModelId) {
       const selectedObject = findObjectById(sceneData.scene, selectedModelId);
       
       if (selectedObject) {
-        // Detach any existing object
         if (sceneData.transformControls.object) {
           sceneData.transformControls.detach();
         }
         
-        // Attach the new object
         sceneData.transformControls.attach(selectedObject);
         
-        // Highlight the selected object
         highlightObject(selectedObject, selectedFaceId);
         
-        // Update local transform state
         setLocalTransform(getTransformFromObject(selectedObject));
       }
     } else {
-      // Detach if no model is selected
       if (sceneData.transformControls.object) {
         sceneData.transformControls.detach();
       }
     }
   }, [selectedModelId, selectedFaceId, sceneData, models]);
 
-  // Handle object picking
   const handlePointerDown = useCallback((event: React.PointerEvent) => {
     if (!containerRef.current || !sceneData.camera || !sceneData.scene) return;
 
@@ -209,14 +185,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ transformMode }) => {
     }
   }, [sceneData, selectModel, deselectModel]);
 
-  // Detach transform controls on unmount
   useEffect(() => {
     return () => {
       if (sceneData.transformControls && sceneData.scene) {
         if (sceneData.transformControls.object) {
           sceneData.transformControls.detach();
         }
-        sceneData.scene.remove(sceneData.transformControls);
+        sceneData.scene.remove(sceneData.transformControls as unknown as Object3D);
       }
     };
   }, [sceneData.transformControls, sceneData.scene]);
