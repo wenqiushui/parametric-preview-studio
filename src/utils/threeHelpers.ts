@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { PickResult } from '@/types';
 
 /**
@@ -111,7 +111,8 @@ export function pickObject(
   const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera({ x, y }, camera);
+  const mousePosition = new THREE.Vector2(x, y);
+  raycaster.setFromCamera(mousePosition, camera);
 
   const intersects = raycaster.intersectObjects(scene.children, true);
 
