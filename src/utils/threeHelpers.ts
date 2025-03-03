@@ -105,6 +105,7 @@ export function pickObject(
   camera: THREE.Camera,
   scene: THREE.Scene
 ): PickResult | null {
+  // Calculate mouse position in normalized device coordinates
   const rect = container.getBoundingClientRect();
   const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -116,10 +117,17 @@ export function pickObject(
   // Get all selectable objects (exclude grid, lights, etc.)
   const selectableObjects: THREE.Object3D[] = [];
   scene.traverse((object) => {
-    // Only include objects that have a userData.id property
-    // or are children of objects with a userData.id property
+    // Include objects that have a userData.id property
+    // or are direct mesh children of objects with a userData.id 
     if (object.userData && object.userData.id) {
       selectableObjects.push(object);
+      
+      // Also include direct mesh children for better selection
+      object.children.forEach(child => {
+        if (child instanceof THREE.Mesh) {
+          selectableObjects.push(child);
+        }
+      });
     }
   });
 
@@ -173,7 +181,7 @@ export function highlightObject(
   object: THREE.Object3D,
   faceIndex?: number
 ): void {
-  // Reset all materials
+  // Reset all materials in this object hierarchy
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       if (child.userData.originalMaterial) {
@@ -250,7 +258,7 @@ export function findObjectById(
   let foundObject: THREE.Object3D | null = null;
   
   scene.traverse((object) => {
-    if (object.userData.id === id) {
+    if (object.userData && object.userData.id === id) {
       foundObject = object;
     }
   });
@@ -264,21 +272,27 @@ export function findObjectById(
 export function disposeObject(object: THREE.Object3D): void {
   if (!object) return;
   
-  object.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      if (child.geometry) {
-        child.geometry.dispose();
-      }
-      
-      if (child.material) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach((material) => disposeMaterial(material));
-        } else {
-          disposeMaterial(child.material);
-        }
+  // First remove any children to avoid processing them twice
+  while (object.children.length > 0) {
+    const child = object.children[0];
+    object.remove(child);
+    disposeObject(child);
+  }
+  
+  // Dispose mesh-specific resources
+  if (object instanceof THREE.Mesh) {
+    if (object.geometry) {
+      object.geometry.dispose();
+    }
+    
+    if (object.material) {
+      if (Array.isArray(object.material)) {
+        object.material.forEach((material) => disposeMaterial(material));
+      } else {
+        disposeMaterial(object.material);
       }
     }
-  });
+  }
 }
 
 /**

@@ -188,6 +188,19 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (modelToRemove.object.parent) {
         modelToRemove.object.parent.remove(modelToRemove.object);
       }
+      
+      // Properly dispose of the resources
+      if (modelToRemove.object.geometry) {
+        modelToRemove.object.geometry.dispose();
+      }
+      
+      if (modelToRemove.object.material) {
+        if (Array.isArray(modelToRemove.object.material)) {
+          modelToRemove.object.material.forEach(material => material.dispose());
+        } else {
+          modelToRemove.object.material.dispose();
+        }
+      }
     }
     
     dispatch({ type: 'REMOVE_MODEL', payload: id });
@@ -202,26 +215,51 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateModelParameters = (id: string, parameters: Record<string, any>) => {
+    const model = state.models.find(m => m.id === id);
+    if (!model) return;
+    
     dispatch({ type: 'UPDATE_MODEL_PARAMETERS', payload: { id, parameters } });
     
     // Update the 3D object based on new parameters
-    const model = state.models.find(m => m.id === id);
-    if (model) {
-      const prototype = getPrototypeById(model.prototypeId);
-      if (prototype) {
-        const updatedParams = { ...model.parameters, ...parameters };
-        const newObject = prototype.createModel(updatedParams);
-        if (newObject) {
-          newObject.userData.id = id;
-          newObject.position.copy(model.position);
-          newObject.rotation.copy(model.rotation);
-          newObject.scale.copy(model.scale);
+    const prototype = getPrototypeById(model.prototypeId);
+    if (prototype) {
+      const updatedParams = { ...model.parameters, ...parameters };
+      const newObject = prototype.createModel(updatedParams);
+      
+      if (newObject) {
+        // Transfer properties from the old object to the new one
+        newObject.userData.id = id;
+        
+        // Copy transform from the existing model
+        newObject.position.copy(model.position);
+        newObject.rotation.copy(model.rotation);
+        newObject.scale.copy(model.scale);
+        
+        // If the old object exists in a scene, replace it
+        if (model.object && model.object.parent) {
+          const parent = model.object.parent;
+          parent.remove(model.object);
+          parent.add(newObject);
           
-          updateModel(id, { 
-            parameters: updatedParams,
-            object: newObject 
-          });
+          // Dispose old object resources
+          if (model.object.geometry) {
+            model.object.geometry.dispose();
+          }
+          
+          if (model.object.material) {
+            if (Array.isArray(model.object.material)) {
+              model.object.material.forEach(material => material.dispose());
+            } else {
+              model.object.material.dispose();
+            }
+          }
         }
+        
+        // Update the model with the new object
+        updateModel(id, {
+          parameters: updatedParams,
+          object: newObject
+        });
       }
     }
   };
@@ -256,7 +294,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     dispatch({ type: 'CLEAR_SELECTION' });
   };
 
-  // Update 3D objects when models change
+  // Ensure model objects match their data state
   useEffect(() => {
     state.models.forEach(model => {
       if (model.object) {
