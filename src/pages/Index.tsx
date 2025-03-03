@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ModelProvider } from '@/context/ModelContext';
 import { Button } from '@/components/ui/button';
@@ -58,10 +57,7 @@ const ModelTreeItem = ({
         {hasChildren ? (
           <button 
             className="w-5 h-5 flex items-center justify-center mr-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded(!expanded);
-            }}
+            onClick={() => setExpanded(!expanded)}
           >
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
@@ -72,10 +68,7 @@ const ModelTreeItem = ({
         {/* Select button */}
         <button
           className={`p-1 ${isSelected ? 'text-blue-500' : 'text-gray-500 hover:text-blue-500'} mr-1`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(model.id);
-          }}
+          onClick={() => onSelect(model.id)}
           title="Select"
         >
           <MousePointer size={16} />
@@ -84,10 +77,7 @@ const ModelTreeItem = ({
         {/* Model name */}
         <span 
           className="flex-grow truncate"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(model.id);
-          }}
+          onClick={() => onSelect(model.id)}
         >
           {model.name}
         </span>
@@ -96,10 +86,7 @@ const ModelTreeItem = ({
         <div className="flex items-center space-x-1">
           <button
             className={`p-1 ${model.visible ? 'text-gray-500 hover:text-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleVisibility(model.id);
-            }}
+            onClick={() => onToggleVisibility(model.id)}
             title={model.visible ? "Hide" : "Show"}
           >
             {model.visible ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -107,10 +94,7 @@ const ModelTreeItem = ({
           
           <button
             className="p-1 text-gray-500 hover:text-red-500"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(model.id);
-            }}
+            onClick={() => onRemove(model.id)}
             title="Remove"
           >
             <Trash2 size={16} />
