@@ -6,7 +6,7 @@ import { getAllPrototypes } from '@/utils/modelPrototypes';
 import { useModelContext } from '@/context/ModelContext';
 import ModelViewer from '@/components/ModelViewer';
 import { TransformMode } from '@/types';
-import { ChevronDown, ChevronRight, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Trash2, MousePointer } from 'lucide-react';
 
 const ModelManager = () => {
   const { addModel } = useModelContext();
@@ -51,9 +51,8 @@ const ModelTreeItem = ({
   return (
     <div className="w-full">
       <div 
-        className={`flex items-center py-1 px-2 rounded cursor-pointer ${isSelected ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100'}`}
+        className={`flex items-center py-1 px-2 rounded ${isSelected ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100'}`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={() => onSelect(model.id)}
       >
         {/* Expand/Collapse icon for composite models */}
         {hasChildren ? (
@@ -70,13 +69,33 @@ const ModelTreeItem = ({
           <div className="w-5 h-5 mr-1"></div>
         )}
         
+        {/* Select button */}
+        <button
+          className={`p-1 ${isSelected ? 'text-blue-500' : 'text-gray-500 hover:text-blue-500'} mr-1`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(model.id);
+          }}
+          title="Select"
+        >
+          <MousePointer size={16} />
+        </button>
+        
         {/* Model name */}
-        <span className="flex-grow truncate">{model.name}</span>
+        <span 
+          className="flex-grow truncate"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(model.id);
+          }}
+        >
+          {model.name}
+        </span>
         
         {/* Actions */}
         <div className="flex items-center space-x-1">
           <button
-            className="p-1 text-gray-500 hover:text-gray-700"
+            className={`p-1 ${model.visible ? 'text-gray-500 hover:text-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
             onClick={(e) => {
               e.stopPropagation();
               onToggleVisibility(model.id);
