@@ -6,6 +6,7 @@ import { getAllPrototypes } from '@/utils/modelPrototypes';
 import { useModelContext } from '@/context/ModelContext';
 import ModelViewer from '@/components/ModelViewer';
 import { TransformMode } from '@/types';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Trash2 } from 'lucide-react';
 
 const ModelManager = () => {
   const { addModel } = useModelContext();
@@ -29,39 +30,115 @@ const ModelManager = () => {
   );
 };
 
+const ModelTreeItem = ({ 
+  model, 
+  depth = 0,
+  onSelect,
+  onToggleVisibility,
+  onRemove
+}) => {
+  const { models, selectedModelId } = useModelContext();
+  const [expanded, setExpanded] = useState(true);
+  const isSelected = model.id === selectedModelId;
+  
+  // Get all direct children of this model
+  const childModels = model.isComposite && model.childrenIds 
+    ? models.filter(m => model.childrenIds?.includes(m.id))
+    : [];
+  
+  const hasChildren = childModels.length > 0;
+  
+  return (
+    <div className="w-full">
+      <div 
+        className={`flex items-center py-1 px-2 rounded cursor-pointer ${isSelected ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100'}`}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        onClick={() => onSelect(model.id)}
+      >
+        {/* Expand/Collapse icon for composite models */}
+        {hasChildren ? (
+          <button 
+            className="w-5 h-5 flex items-center justify-center mr-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+          >
+            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
+        ) : (
+          <div className="w-5 h-5 mr-1"></div>
+        )}
+        
+        {/* Model name */}
+        <span className="flex-grow truncate">{model.name}</span>
+        
+        {/* Actions */}
+        <div className="flex items-center space-x-1">
+          <button
+            className="p-1 text-gray-500 hover:text-gray-700"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleVisibility(model.id);
+            }}
+            title={model.visible ? "Hide" : "Show"}
+          >
+            {model.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+          
+          <button
+            className="p-1 text-gray-500 hover:text-red-500"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(model.id);
+            }}
+            title="Remove"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+      
+      {/* Render children if expanded */}
+      {expanded && hasChildren && (
+        <div className="w-full">
+          {childModels.map(childModel => (
+            <ModelTreeItem
+              key={childModel.id}
+              model={childModel}
+              depth={depth + 1}
+              onSelect={onSelect}
+              onToggleVisibility={onToggleVisibility}
+              onRemove={onRemove}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ModelDisplayControls = () => {
-  const { state, removeModel, setModelVisibility } = useModelContext();
+  const { models, selectModel, removeModel, setModelVisibility } = useModelContext();
+  
+  // Get only top-level models (not submodels)
+  const topLevelModels = models.filter(model => !model.isSubmodel);
   
   return (
     <div className="bg-white shadow rounded-lg p-4 mt-4">
       <h2 className="text-lg font-medium mb-4">Scene Models</h2>
-      {state.models.length === 0 ? (
+      {models.length === 0 ? (
         <p className="text-gray-500">No models in the scene. Add a model to get started.</p>
       ) : (
-        <div className="space-y-2">
-          {state.models.map(model => (
-            <div 
-              key={model.id} 
-              className={`p-2 border rounded flex justify-between items-center ${model.selected ? 'border-blue-500 bg-blue-50' : ''}`}
-            >
-              <span>{model.name}</span>
-              <div className="flex space-x-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setModelVisibility(model.id, !model.visible)}
-                >
-                  {model.visible ? 'Hide' : 'Show'}
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => removeModel(model.id)}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
+        <div className="space-y-1 max-h-[300px] overflow-y-auto">
+          {topLevelModels.map(model => (
+            <ModelTreeItem
+              key={model.id}
+              model={model}
+              onSelect={selectModel}
+              onToggleVisibility={setModelVisibility}
+              onRemove={removeModel}
+            />
           ))}
         </div>
       )}

@@ -32,7 +32,11 @@ export interface ModelInstance {
   scale: Vector3;
   parameters: Record<string, any>;
   object: Object3D | null;
-  faceMaterials?: Record<number, string>; // Added to store face-specific materials
+  faceMaterials?: Record<number, string>; // For face-specific materials
+  parentId?: string; // Reference to parent model (for composite models)
+  isComposite?: boolean; // Flag for composite models
+  childrenIds?: string[]; // References to child models (for composite models)
+  isSubmodel?: boolean; // Flag for models that are part of composite models
 }
 
 export interface AppState {

@@ -10,6 +10,7 @@ import { getMaterialById, createThreeMaterial } from '@/utils/materialLibrary';
 type ActionType = 
   | { type: 'SET_MODE', payload: 'admin' | 'user' }
   | { type: 'ADD_MODEL', payload: ModelInstance }
+  | { type: 'ADD_COMPOSITE_MODEL', payload: { parent: ModelInstance, children: ModelInstance[] } }
   | { type: 'REMOVE_MODEL', payload: string }
   | { type: 'UPDATE_MODEL', payload: { id: string, updates: Partial<ModelInstance> } }
   | { type: 'SET_MODEL_VISIBILITY', payload: { id: string, visible: boolean } }
@@ -40,13 +41,75 @@ function reducer(state: AppState, action: ActionType): AppState {
         models: [...state.models, action.payload],
         selectedModelId: action.payload.id
       };
-    
-    case 'REMOVE_MODEL':
+
+    case 'ADD_COMPOSITE_MODEL': {
+      const { parent, children } = action.payload;
+      // Add parent with references to children
+      const updatedParent = {
+        ...parent,
+        isComposite: true,
+        childrenIds: children.map(child => child.id)
+      };
+      // Add children with reference to parent
+      const updatedChildren = children.map(child => ({
+        ...child,
+        parentId: parent.id,
+        isSubmodel: true
+      }));
+      
       return {
         ...state,
-        models: state.models.filter(model => model.id !== action.payload),
-        selectedModelId: state.selectedModelId === action.payload ? null : state.selectedModelId
+        models: [...state.models, updatedParent, ...updatedChildren],
+        selectedModelId: parent.id
       };
+    }
+    
+    case 'REMOVE_MODEL': {
+      const modelToRemove = state.models.find(m => m.id === action.payload);
+      if (!modelToRemove) return state;
+      
+      let modelsToRemove = [action.payload];
+      
+      // If it's a composite model, also remove all children
+      if (modelToRemove.isComposite && modelToRemove.childrenIds) {
+        modelsToRemove = [...modelsToRemove, ...modelToRemove.childrenIds];
+      }
+      
+      // If it's a child model, check if we should remove the parent
+      if (modelToRemove.parentId) {
+        const parent = state.models.find(m => m.id === modelToRemove.parentId);
+        if (parent && parent.childrenIds) {
+          // Update parent to remove reference to this child
+          const updatedChildrenIds = parent.childrenIds.filter(id => id !== action.payload);
+          
+          // If parent has no children left, remove the parent too
+          if (updatedChildrenIds.length === 0) {
+            modelsToRemove.push(parent.id);
+          } else {
+            // Otherwise update the parent's childrenIds
+            const updatedModels = state.models.map(model => 
+              model.id === parent.id 
+                ? { ...model, childrenIds: updatedChildrenIds } 
+                : model
+            );
+            
+            return {
+              ...state,
+              models: updatedModels.filter(model => model.id !== action.payload),
+              selectedModelId: state.selectedModelId === action.payload ? null : state.selectedModelId
+            };
+          }
+        }
+      }
+      
+      return {
+        ...state,
+        models: state.models.filter(model => !modelsToRemove.includes(model.id)),
+        selectedModelId: state.selectedModelId && modelsToRemove.includes(state.selectedModelId) 
+          ? null 
+          : state.selectedModelId
+      };
+    }
     
     case 'UPDATE_MODEL':
       return {
@@ -58,26 +121,41 @@ function reducer(state: AppState, action: ActionType): AppState {
         )
       };
     
-    case 'SET_MODEL_VISIBILITY':
+    case 'SET_MODEL_VISIBILITY': {
+      const modelToUpdate = state.models.find(m => m.id === action.payload.id);
+      if (!modelToUpdate) return state;
+      
+      let modelsToUpdate = [action.payload.id];
+      
+      // If it's a composite model, also update visibility of all children
+      if (modelToUpdate.isComposite && modelToUpdate.childrenIds) {
+        modelsToUpdate = [...modelsToUpdate, ...modelToUpdate.childrenIds];
+      }
+      
       return {
         ...state,
         models: state.models.map(model => 
-          model.id === action.payload.id 
+          modelsToUpdate.includes(model.id)
             ? { ...model, visible: action.payload.visible } 
             : model
         )
       };
+    }
     
-    case 'SELECT_MODEL':
+    case 'SELECT_MODEL': {
+      // When selecting a model, make sure to deselect all other models
+      const selectedId = action.payload;
+      
       return {
         ...state,
-        selectedModelId: action.payload,
+        selectedModelId: selectedId,
         selectedFaceId: null,
         models: state.models.map(model => ({
           ...model,
-          selected: model.id === action.payload
+          selected: model.id === selectedId
         }))
       };
+    }
     
     case 'SELECT_FACE':
       return {
@@ -85,20 +163,52 @@ function reducer(state: AppState, action: ActionType): AppState {
         selectedFaceId: action.payload
       };
     
-    case 'UPDATE_MODEL_TRANSFORM':
+    case 'UPDATE_MODEL_TRANSFORM': {
+      const { id, position, rotation, scale } = action.payload;
+      const modelToUpdate = state.models.find(m => m.id === id);
+      if (!modelToUpdate) return state;
+      
+      // Update parent and all its children, or just the individual model
+      const modelsToUpdate = modelToUpdate.isComposite && modelToUpdate.childrenIds
+        ? [id, ...modelToUpdate.childrenIds]
+        : modelToUpdate.isSubmodel 
+          ? [modelToUpdate.parentId as string, ...(state.models.find(m => m.id === modelToUpdate.parentId)?.childrenIds || [])]
+          : [id];
+      
+      // Calculate relative position for children if parent is being moved
+      const parentUpdates = {
+        position: position || modelToUpdate.position,
+        rotation: rotation || modelToUpdate.rotation,
+        scale: scale || modelToUpdate.scale
+      };
+      
       return {
         ...state,
-        models: state.models.map(model => 
-          model.id === action.payload.id 
-            ? { 
-                ...model, 
-                position: action.payload.position || model.position,
-                rotation: action.payload.rotation || model.rotation,
-                scale: action.payload.scale || model.scale
-              } 
-            : model
-        )
+        models: state.models.map(model => {
+          if (model.id === id) {
+            // Direct update for the selected model
+            return { 
+              ...model, 
+              position: position || model.position,
+              rotation: rotation || model.rotation,
+              scale: scale || model.scale
+            };
+          } else if (modelToUpdate.isComposite && modelToUpdate.childrenIds?.includes(model.id)) {
+            // For child models, calculate relative transform (for now just copy parent transform)
+            return model;
+          } else if (modelToUpdate.isSubmodel && model.id === modelToUpdate.parentId) {
+            // If child is selected, update parent
+            return { 
+              ...model, 
+              position: position || model.position,
+              rotation: rotation || model.rotation,
+              scale: scale || model.scale
+            };
+          }
+          return model;
+        })
       };
+    }
     
     case 'UPDATE_MODEL_PARAMETERS':
       return {
@@ -150,6 +260,7 @@ interface ModelContextType {
   state: AppState;
   dispatch: React.Dispatch<ActionType>;
   addModel: (prototype: ModelPrototype, name?: string) => void;
+  addCompositeModel: (prototype: ModelPrototype, name?: string, submodels?: {prototype: ModelPrototype, name: string}[]) => void;
   removeModel: (id: string) => void;
   selectModel: (id: string | null) => void;
   selectFace: (id: string | null) => void;
@@ -198,6 +309,87 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     toast({
       title: "Model added",
       description: `${newModel.name} has been added to the scene.`
+    });
+  };
+
+  const addCompositeModel = (prototype: ModelPrototype, name?: string, submodels?: {prototype: ModelPrototype, name: string}[]) => {
+    // Create the parent model
+    const parentModel: ModelInstance = {
+      id: `model-${Date.now()}`,
+      prototypeId: prototype.id,
+      name: name || `${prototype.name} ${state.models.length + 1}`,
+      visible: true,
+      selected: false,
+      position: new Vector3(0, 0, 0),
+      rotation: new Euler(0, 0, 0),
+      scale: new Vector3(1, 1, 1),
+      parameters: prototype.parameters.reduce((acc, param) => {
+        acc[param.id] = param.default;
+        return acc;
+      }, {} as Record<string, any>),
+      object: null,
+      isComposite: true,
+      childrenIds: []
+    };
+    
+    // Create the Three.js object for parent
+    const parentObject = prototype.createModel(parentModel.parameters);
+    if (parentObject) {
+      parentObject.userData.id = parentModel.id;
+      parentModel.object = parentObject;
+    }
+
+    // Create child models if provided
+    const childModels: ModelInstance[] = [];
+    if (submodels && submodels.length > 0) {
+      submodels.forEach((submodel, index) => {
+        const childId = `${parentModel.id}-child-${index}`;
+        const childModel: ModelInstance = {
+          id: childId,
+          prototypeId: submodel.prototype.id,
+          name: submodel.name,
+          visible: true,
+          selected: false,
+          position: new Vector3(0, 0, 0),
+          rotation: new Euler(0, 0, 0),
+          scale: new Vector3(1, 1, 1),
+          parameters: submodel.prototype.parameters.reduce((acc, param) => {
+            acc[param.id] = param.default;
+            return acc;
+          }, {} as Record<string, any>),
+          object: null,
+          isSubmodel: true,
+          parentId: parentModel.id
+        };
+        
+        // Create Three.js object for child
+        const childObject = submodel.prototype.createModel(childModel.parameters);
+        if (childObject) {
+          childObject.userData.id = childModel.id;
+          childModel.object = childObject;
+          
+          // Add child object to parent object
+          if (parentModel.object) {
+            parentModel.object.add(childObject);
+          }
+        }
+        
+        childModels.push(childModel);
+      });
+    }
+
+    // Dispatch composite model action
+    dispatch({ 
+      type: 'ADD_COMPOSITE_MODEL', 
+      payload: { 
+        parent: parentModel, 
+        children: childModels
+      }
+    });
+    
+    toast({
+      title: "Composite model added",
+      description: `${parentModel.name} with ${childModels.length} submodels has been added to the scene.`
     });
   };
 
@@ -367,6 +559,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         state, 
         dispatch, 
         addModel, 
+        addCompositeModel,
         removeModel, 
         selectModel,
         selectFace,
