@@ -32,6 +32,7 @@ export interface ModelInstance {
   scale: Vector3;
   parameters: Record<string, any>;
   object: Object3D | null;
+  faceMaterials?: Record<number, string>; // Added to store face-specific materials
 }
 
 export interface AppState {

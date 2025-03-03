@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -117,17 +118,13 @@ export function pickObject(
   // Get all selectable objects (exclude grid, lights, etc.)
   const selectableObjects: THREE.Object3D[] = [];
   scene.traverse((object) => {
-    // Include objects that have a userData.id property
-    // or are direct mesh children of objects with a userData.id 
-    if (object.userData && object.userData.id) {
+    // Include objects with geometry (meshes) for face selection
+    if (object instanceof THREE.Mesh) {
       selectableObjects.push(object);
-      
-      // Also include direct mesh children for better selection
-      object.children.forEach(child => {
-        if (child instanceof THREE.Mesh) {
-          selectableObjects.push(child);
-        }
-      });
+    }
+    // Also include objects that have a userData.id property
+    else if (object.userData && object.userData.id) {
+      selectableObjects.push(object);
     }
   });
 
@@ -137,7 +134,8 @@ export function pickObject(
     const intersect = intersects[0];
     return {
       object: intersect.object,
-      face: intersect.faceIndex,
+      face: intersect.face ? intersect.face.a : undefined,
+      faceIndex: intersect.faceIndex,
       point: intersect.point,
       distance: intersect.distance,
       isFace: intersect.faceIndex !== undefined
@@ -215,7 +213,25 @@ export function highlightObject(
         materials[faceIndex] = highlightMaterial;
         object.material = materials;
       } else {
-        object.material = highlightMaterial;
+        // If this object uses a single material but has multiple faces,
+        // we need to convert it to use a material array for highlighting
+        if (object.geometry) {
+          // Create material array with clones of the original
+          const materialCount = object.geometry.groups?.length || 
+                             object.geometry.index?.count ? 
+                             object.geometry.index.count / 3 : 
+                             object.geometry.attributes.position.count / 3;
+          
+          const materialArray = Array(materialCount).fill(0).map(() => 
+            originalMaterial.clone()
+          );
+          
+          // Set the highlight material for the selected face
+          materialArray[faceIndex] = highlightMaterial;
+          object.material = materialArray;
+        } else {
+          object.material = highlightMaterial;
+        }
       }
     } else {
       // Full object highlighting

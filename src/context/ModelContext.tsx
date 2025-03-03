@@ -4,6 +4,7 @@ import { AppState, ModelInstance, ModelPrototype } from '@/types';
 import { toast } from '@/components/ui/use-toast';
 import { getPrototypeById } from '@/utils/modelPrototypes';
 import { disposeObject } from '@/utils/threeHelpers';
+import { getMaterialById, createThreeMaterial } from '@/utils/materialLibrary';
 
 // Action types
 type ActionType = 
@@ -16,6 +17,7 @@ type ActionType =
   | { type: 'SELECT_FACE', payload: string | null }
   | { type: 'UPDATE_MODEL_TRANSFORM', payload: { id: string, position?: Vector3, rotation?: Euler, scale?: Vector3 } }
   | { type: 'UPDATE_MODEL_PARAMETERS', payload: { id: string, parameters: Record<string, any> } }
+  | { type: 'SET_FACE_MATERIAL', payload: { modelId: string, faceIndex: number, materialId: string } }
   | { type: 'CLEAR_SELECTION' };
 
 // Initial state
@@ -111,6 +113,22 @@ function reducer(state: AppState, action: ActionType): AppState {
         )
       };
     
+    case 'SET_FACE_MATERIAL':
+      return {
+        ...state,
+        models: state.models.map(model => 
+          model.id === action.payload.modelId 
+            ? { 
+                ...model, 
+                faceMaterials: { 
+                  ...(model.faceMaterials || {}), 
+                  [action.payload.faceIndex]: action.payload.materialId 
+                } 
+              } 
+            : model
+        )
+      };
+    
     case 'CLEAR_SELECTION':
       return {
         ...state,
@@ -134,9 +152,11 @@ interface ModelContextType {
   addModel: (prototype: ModelPrototype, name?: string) => void;
   removeModel: (id: string) => void;
   selectModel: (id: string | null) => void;
+  selectFace: (id: string | null) => void;
   updateModelParameters: (id: string, parameters: Record<string, any>) => void;
   updateModelTransform: (id: string, position?: Vector3, rotation?: Euler, scale?: Vector3) => void;
   setModelVisibility: (id: string, visible: boolean) => void;
+  setFaceMaterial: (modelId: string, faceIndex: number, materialId: string) => void;
   deselectModel: () => void;
   updateModel: (id: string, updates: Partial<ModelInstance>) => void;
   models: ModelInstance[];
@@ -205,6 +225,10 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     dispatch({ type: 'SELECT_MODEL', payload: id });
   };
 
+  const selectFace = (id: string | null) => {
+    dispatch({ type: 'SELECT_FACE', payload: id });
+  };
+
   const updateModelParameters = (id: string, parameters: Record<string, any>) => {
     const model = state.models.find(m => m.id === id);
     if (!model) return;
@@ -267,6 +291,55 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const setFaceMaterial = (modelId: string, faceIndex: number, materialId: string) => {
+    dispatch({ 
+      type: 'SET_FACE_MATERIAL', 
+      payload: { modelId, faceIndex, materialId } 
+    });
+    
+    // Find the model and update its 3D object's material
+    const model = state.models.find(m => m.id === modelId);
+    if (model && model.object) {
+      // Traverse to find mesh with this face
+      model.object.traverse((child) => {
+        if (child instanceof Mesh) {
+          // If the mesh has a material array, update the specific face material
+          if (Array.isArray(child.material)) {
+            if (faceIndex < child.material.length) {
+              const material = getMaterialById(materialId);
+              if (material) {
+                child.material[faceIndex] = createThreeMaterial(material);
+              }
+            }
+          } 
+          // If this is the object with the selected face, update its material
+          else if (child.geometry && child.geometry.groups) {
+            const groupIndex = child.geometry.groups.findIndex((group, index) => index === faceIndex);
+            if (groupIndex !== -1) {
+              const material = getMaterialById(materialId);
+              if (material) {
+                // Convert to material array if not already
+                if (!Array.isArray(child.material)) {
+                  const originalMaterial = child.material;
+                  const materialArray = child.geometry.groups.map(() => originalMaterial.clone());
+                  child.material = materialArray;
+                }
+                
+                // Now update the specific face material
+                child.material[groupIndex] = createThreeMaterial(material);
+              }
+            }
+          }
+        }
+      });
+    }
+    
+    toast({
+      title: "Material applied",
+      description: `New material has been applied to the selected face.`
+    });
+  };
+
   const updateModel = (id: string, updates: Partial<ModelInstance>) => {
     dispatch({ type: 'UPDATE_MODEL', payload: { id, updates } });
   };
@@ -296,9 +369,11 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addModel, 
         removeModel, 
         selectModel,
+        selectFace,
         updateModelParameters,
         updateModelTransform,
         setModelVisibility,
+        setFaceMaterial,
         deselectModel,
         updateModel,
         models: state.models,

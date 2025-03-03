@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getMaterialById } from './materialLibrary';
+import { getMaterialById, createThreeMaterial } from './materialLibrary';
 import { ModelPrototype } from '@/types';
 
 // Helper to create a box geometry with customizable dimensions
@@ -25,7 +25,7 @@ const modelPrototypes: ModelPrototype[] = [
     id: 'desk-basic',
     name: 'Basic Desk',
     description: 'A simple rectangular desk',
-    category: 'Furniture', // Added category
+    category: 'Furniture',
     parameters: [
       {
         id: 'width',
@@ -108,7 +108,7 @@ const modelPrototypes: ModelPrototype[] = [
     id: 'desk-drawer',
     name: 'Desk with Drawer',
     description: 'A desk with a drawer unit',
-    category: 'Furniture', // Added category
+    category: 'Furniture',
     parameters: [
       {
         id: 'width',
@@ -231,7 +231,7 @@ const modelPrototypes: ModelPrototype[] = [
     id: 'bookshelf',
     name: 'Bookshelf',
     description: 'A vertical bookshelf with adjustable shelves',
-    category: 'Furniture', // Added category
+    category: 'Furniture',
     parameters: [
       {
         id: 'width',
@@ -324,6 +324,216 @@ const modelPrototypes: ModelPrototype[] = [
       }
       
       return shelfGroup;
+    }
+  },
+  {
+    id: 'elevator-cabin',
+    name: 'Elevator Cabin',
+    description: 'A customizable elevator cabin with doors',
+    category: 'Furniture',
+    parameters: [
+      {
+        id: 'width',
+        name: 'Width',
+        type: 'number',
+        default: 1.6,
+        min: 1.0,
+        max: 2.5,
+        step: 0.1
+      },
+      {
+        id: 'depth',
+        name: 'Depth',
+        type: 'number',
+        default: 1.8,
+        min: 1.2,
+        max: 3.0,
+        step: 0.1
+      },
+      {
+        id: 'height',
+        name: 'Height',
+        type: 'number',
+        default: 2.4,
+        min: 2.0,
+        max: 3.0,
+        step: 0.1
+      },
+      {
+        id: 'doorWidth',
+        name: 'Door Width',
+        type: 'number',
+        default: 0.9,
+        min: 0.7,
+        max: 1.5,
+        step: 0.1
+      },
+      {
+        id: 'wallMaterial',
+        name: 'Wall Material',
+        type: 'select',
+        default: 'metal-brushed',
+        options: [
+          { label: 'Brushed Metal', value: 'metal-brushed' },
+          { label: 'Chrome Metal', value: 'metal-chrome' },
+          { label: 'Oak Wood', value: 'wood-oak' }
+        ]
+      },
+      {
+        id: 'floorMaterial',
+        name: 'Floor Material',
+        type: 'select',
+        default: 'wood-oak',
+        options: [
+          { label: 'Oak Wood', value: 'wood-oak' },
+          { label: 'Walnut Wood', value: 'wood-walnut' }
+        ]
+      },
+      {
+        id: 'doorMaterial',
+        name: 'Door Material',
+        type: 'select',
+        default: 'metal-chrome',
+        options: [
+          { label: 'Chrome Metal', value: 'metal-chrome' },
+          { label: 'Brushed Metal', value: 'metal-brushed' }
+        ]
+      }
+    ],
+    createModel: (params) => {
+      const { width, depth, height, doorWidth, wallMaterial, floorMaterial, doorMaterial } = params;
+      
+      // Create the elevator cabin as a group
+      const cabinGroup = new THREE.Group();
+      
+      // Wall thickness
+      const wallThickness = 0.05;
+      
+      // Floor (bottom)
+      const floor = createBox(width, wallThickness, depth, floorMaterial);
+      floor.position.y = -height/2 + wallThickness/2;
+      cabinGroup.add(floor);
+      
+      // Ceiling (top)
+      const ceiling = createBox(width, wallThickness, depth, wallMaterial);
+      ceiling.position.y = height/2 - wallThickness/2;
+      cabinGroup.add(ceiling);
+      
+      // Back wall
+      const backWall = createBox(width, height, wallThickness, wallMaterial);
+      backWall.position.z = -depth/2 + wallThickness/2;
+      cabinGroup.add(backWall);
+      
+      // Left side wall
+      const leftWall = createBox(wallThickness, height, depth, wallMaterial);
+      leftWall.position.x = -width/2 + wallThickness/2;
+      cabinGroup.add(leftWall);
+      
+      // Right side wall
+      const rightWall = createBox(wallThickness, height, depth, wallMaterial);
+      rightWall.position.x = width/2 - wallThickness/2;
+      cabinGroup.add(rightWall);
+      
+      // Front wall with door opening
+      const doorHeight = height - wallThickness * 2;
+      
+      // Left side of front wall
+      const leftFrontWidth = (width - doorWidth) / 2;
+      if (leftFrontWidth > 0) {
+        const leftFront = createBox(leftFrontWidth, height, wallThickness, wallMaterial);
+        leftFront.position.set(-width/2 + leftFrontWidth/2, 0, depth/2 - wallThickness/2);
+        cabinGroup.add(leftFront);
+      }
+      
+      // Right side of front wall
+      const rightFrontWidth = (width - doorWidth) / 2;
+      if (rightFrontWidth > 0) {
+        const rightFront = createBox(rightFrontWidth, height, wallThickness, wallMaterial);
+        rightFront.position.set(width/2 - rightFrontWidth/2, 0, depth/2 - wallThickness/2);
+        cabinGroup.add(rightFront);
+      }
+      
+      // Top part of front wall above door
+      const topFront = createBox(doorWidth, height - doorHeight, wallThickness, wallMaterial);
+      topFront.position.set(0, doorHeight/2, depth/2 - wallThickness/2);
+      cabinGroup.add(topFront);
+      
+      // Door (closed position)
+      const door = createBox(doorWidth, doorHeight, wallThickness, doorMaterial);
+      door.position.set(0, 0, depth/2 - wallThickness/2);
+      door.userData.isDoor = true; // Mark as door for animations
+      cabinGroup.add(door);
+      
+      // Add some interior details
+      
+      // Handrail
+      const handrailRadius = 0.02;
+      const handrailGeometry = new THREE.TorusGeometry(handrailRadius, handrailRadius/2, 8, 24, Math.PI);
+      const handrailMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xd0d0d0, 
+        metalness: 0.8, 
+        roughness: 0.2 
+      });
+      
+      // Back handrail
+      const backHandrail = new THREE.Mesh(handrailGeometry, handrailMaterial);
+      backHandrail.position.set(0, height/2 - height/4, -depth/2 + wallThickness + handrailRadius);
+      backHandrail.rotation.x = Math.PI / 2;
+      cabinGroup.add(backHandrail);
+      
+      // Side handrails
+      const leftHandrail = new THREE.Mesh(handrailGeometry, handrailMaterial);
+      leftHandrail.position.set(-width/2 + wallThickness + handrailRadius, height/2 - height/4, 0);
+      leftHandrail.rotation.x = Math.PI / 2;
+      leftHandrail.rotation.z = Math.PI / 2;
+      cabinGroup.add(leftHandrail);
+      
+      const rightHandrail = new THREE.Mesh(handrailGeometry, handrailMaterial);
+      rightHandrail.position.set(width/2 - wallThickness - handrailRadius, height/2 - height/4, 0);
+      rightHandrail.rotation.x = Math.PI / 2;
+      rightHandrail.rotation.z = Math.PI / 2;
+      cabinGroup.add(rightHandrail);
+      
+      // Control panel
+      const panelWidth = 0.2;
+      const panelHeight = 0.3;
+      const panelDepth = 0.05;
+      
+      const panelGeometry = new THREE.BoxGeometry(panelWidth, panelHeight, panelDepth);
+      const panelMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x303030, 
+        metalness: 0.5, 
+        roughness: 0.8 
+      });
+      
+      const controlPanel = new THREE.Mesh(panelGeometry, panelMaterial);
+      controlPanel.position.set(-width/2 + wallThickness*2 + panelWidth/2, height/2 - height/3, -depth/2 + wallThickness*2 + panelDepth/2);
+      cabinGroup.add(controlPanel);
+      
+      // Add buttons to the panel
+      const buttonRadius = 0.015;
+      const buttonGeometry = new THREE.CircleGeometry(buttonRadius, 16);
+      const buttonMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xffffff, 
+        metalness: 0.3, 
+        roughness: 0.5 
+      });
+      
+      for (let i = 0; i < 5; i++) {
+        const button = new THREE.Mesh(buttonGeometry, buttonMaterial);
+        button.position.set(
+          -width/2 + wallThickness*2 + panelWidth/2,
+          height/2 - height/3 + panelHeight/2 - (i+1) * (buttonRadius*3),
+          -depth/2 + wallThickness*2 + panelDepth + 0.001
+        );
+        button.rotation.y = Math.PI;
+        cabinGroup.add(button);
+      }
+      
+      // Center the entire cabin at the origin
+      cabinGroup.position.y = height/2;
+      
+      return cabinGroup;
     }
   }
 ];
