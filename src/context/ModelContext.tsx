@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { Vector3, Euler } from 'three';
+import { Vector3, Euler, Object3D, Mesh } from 'three';
 import { AppState, ModelInstance, ModelPrototype } from '@/types';
 import { toast } from '@/components/ui/use-toast';
 import { getPrototypeById } from '@/utils/modelPrototypes';
+import { disposeObject } from '@/utils/threeHelpers';
 
 // Action types
 type ActionType = 
@@ -190,17 +191,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       
       // Properly dispose of the resources
-      if (modelToRemove.object.geometry) {
-        modelToRemove.object.geometry.dispose();
-      }
-      
-      if (modelToRemove.object.material) {
-        if (Array.isArray(modelToRemove.object.material)) {
-          modelToRemove.object.material.forEach(material => material.dispose());
-        } else {
-          modelToRemove.object.material.dispose();
-        }
-      }
+      disposeObject(modelToRemove.object);
     }
     
     dispatch({ type: 'REMOVE_MODEL', payload: id });
@@ -242,17 +233,7 @@ export const ModelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           parent.add(newObject);
           
           // Dispose old object resources
-          if (model.object.geometry) {
-            model.object.geometry.dispose();
-          }
-          
-          if (model.object.material) {
-            if (Array.isArray(model.object.material)) {
-              model.object.material.forEach(material => material.dispose());
-            } else {
-              model.object.material.dispose();
-            }
-          }
+          disposeObject(model.object);
         }
         
         // Update the model with the new object
