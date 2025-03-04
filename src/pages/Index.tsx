@@ -73,6 +73,7 @@ const ModelTreeItem = ({
       <div 
         className={`flex items-center py-1 px-2 rounded ${isSelected ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-100'}`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        onClick={handleSelect}
       >
         {/* Expand/Collapse icon for composite models */}
         {hasChildren ? (
@@ -96,18 +97,19 @@ const ModelTreeItem = ({
         </button>
         
         {/* Model name */}
-        <span 
-          className="flex-grow truncate cursor-pointer"
-          onClick={handleSelect}
-        >
+        <span className="flex-grow truncate cursor-pointer">
           {model.name}
         </span>
         
         {/* Actions */}
-        <div className="flex items-center space-x-1" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center space-x-1">
           <button
             className={`p-1 ${model.visible ? 'text-gray-500 hover:text-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
-            onClick={handleToggleVisibility}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleVisibility(model.id);
+            }}
             title={model.visible ? "Hide" : "Show"}
           >
             {model.visible ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -115,7 +117,11 @@ const ModelTreeItem = ({
           
           <button
             className="p-1 text-gray-500 hover:text-red-500"
-            onClick={handleRemove}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRemove(model.id);
+            }}
             title="Remove"
           >
             <Trash2 size={16} />
